@@ -154,3 +154,5 @@ results/
 # Test scripts
 test*.py
 *.sh
+
+download

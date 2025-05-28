@@ -108,6 +108,22 @@ class LLaVa_LVIS4V_LRV_Config(DatasetConfig):
     )
     dataset_root_dir: Path = Path("data")
 
+# OpenSpaces
+@dataclass
+class OpenSpaces_Config(DatasetConfig):
+    dataset_id: str = "openspaces"
+
+    align_stage_components: Tuple[Path, Path] = (
+        Path("download/OpenSpaces/OpenSpaces.json"),
+        Path("download/OpenSpaces/"),
+    )
+    finetune_stage_components: Tuple[Path, Path] = (
+        Path("download/OpenSpaces/OpenSpaces.json"),
+        Path("download/OpenSpaces/"),
+    )
+
+    dataset_root_dir: Path = Path("data")
+
 
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique
@@ -121,6 +137,8 @@ class DatasetRegistry(Enum):
     LLAVA_LRV = LLaVa_LRV_Config
 
     LLAVA_LVIS4V_LRV = LLaVa_LVIS4V_LRV_Config
+
+    OPENSPACES = OpenSpaces_Config
 
     @property
     def dataset_id(self) -> str:
