@@ -29,6 +29,7 @@ from cobra.conf import DatasetConfig, DatasetRegistry, ModelConfig, ModelRegistr
 from cobra.models import get_llm_backbone_and_tokenizer, get_vision_backbone_and_transform, get_vlm
 from cobra.overwatch import initialize_overwatch
 from cobra.preprocessing import get_dataset_and_collator
+from scripts.mama_lora import LoRA_Layer
 from cobra.training import Metrics, get_train_strategy
 from cobra.util import set_global_seed
 
@@ -176,6 +177,38 @@ def pretrain(cfg: PretrainConfig) -> None:
         default_image_resolution=vision_backbone.default_image_resolution,
         padding_side=tokenizer.padding_side,
     )
+
+
+    # print(vlm)
+
+    def count_trainable_params(model):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    def count_params(model):
+        return sum(p.numel() for p in model.parameters())
+
+    def replace_module(model, module_name, wrapper_class, *args, **kwargs):
+        # Split module name into parent path and leaf name
+        name_parts = module_name.split('.')
+        leaf_name = name_parts[-1]
+        parent_path = '.'.join(name_parts[:-1])
+
+        # Get parent module (returns model itself if parent_path is empty)
+        parent = model if not parent_path else model.get_submodule(parent_path)
+
+        # Extract original module and replace with wrapper
+        original_module = getattr(parent, leaf_name)
+        setattr(parent, leaf_name, wrapper_class(original_module, *args, **kwargs))
+
+    in_proj_to_change = [name for name, _ in vlm.named_modules() if "in_proj" in name]
+    for name in in_proj_to_change:
+        replace_module(vlm, name, LoRA_Layer, rank=1, alpha=8)
+
+    # for name, param in vlm.named_parameters():
+    #     if param.requires_grad:
+    #         print((name, param))
+
+    print(f"params total: {count_params(vlm)}, trainable: {count_trainable_params(vlm)}")
 
     # Create Train Strategy
     overwatch.info(f"Initializing Train Strategy `{cfg.train_strategy}`")
