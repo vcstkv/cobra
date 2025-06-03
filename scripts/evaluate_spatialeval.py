@@ -268,7 +268,7 @@ def evaluate_spatialeval(cfg: EvaluationConfig) -> None:
         overwatch.info(f"Evaluating on task: {task}")
         
         # Filter dataset by task
-        task_dataset = dataset.filter(lambda x: x["task"] == task)
+        task_dataset = dataset.filter(lambda x: task in x['id'])
         overwatch.info(f"Task {task} has {len(task_dataset)} examples")
         
         if len(task_dataset) == 0:
