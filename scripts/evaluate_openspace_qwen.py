@@ -12,7 +12,7 @@ import torch
 from datasets import load_dataset
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer
 
 # Constants
 MODEL_ID = "remyxai/SpaceQwen2.5-VL-3B-Instruct"
@@ -24,7 +24,7 @@ def setup_model():
     """Initialize model and tokenizer."""
     print("Loading SpaceQwen model and tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         MODEL_ID,
         device_map="auto",
         trust_remote_code=True,
