@@ -200,15 +200,11 @@ def pretrain(cfg: PretrainConfig) -> None:
         original_module = getattr(parent, leaf_name)
         setattr(parent, leaf_name, wrapper_class(original_module, *args, **kwargs))
 
-    in_proj_to_change = [name for name, _ in vlm.named_modules() if "in_proj" in name]
-    for name in in_proj_to_change:
-        replace_module(vlm, name, LoRA_Layer, rank=1, alpha=8)
+    # in_proj_to_change = [name for name, _ in vlm.named_modules() if "in_proj" in name or "out_proj" in name or "lm_head" in name]
+    # for name in in_proj_to_change:
+    #     replace_module(vlm, name, LoRA_Layer, rank=4, alpha=8)
 
-    # for name, param in vlm.named_parameters():
-    #     if param.requires_grad:
-    #         print((name, param))
-
-    print(f"params total: {count_params(vlm)}, trainable: {count_trainable_params(vlm)}")
+    # print(f"params total: {count_params(vlm)}, trainable: {count_trainable_params(vlm)}")
 
     # Create Train Strategy
     overwatch.info(f"Initializing Train Strategy `{cfg.train_strategy}`")
