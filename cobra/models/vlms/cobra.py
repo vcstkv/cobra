@@ -246,6 +246,7 @@ class CobraVLM(VLM):
             overwatch.info(f"Loading from Provided Checkpoint `{pretrained_checkpoint}`", ctx_level=1)
             model_state_dict = torch.load(pretrained_checkpoint)["model"]
             self.projector.load_state_dict(model_state_dict["projector"])
+            self.llm_backbone.load_state_dict(model_state_dict["llm_backbone"])
 
             return
 
