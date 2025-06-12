@@ -125,6 +125,23 @@ class OpenSpaces_Config(DatasetConfig):
     dataset_root_dir: Path = Path("data")
 
 
+# SpaceThinker
+@dataclass
+class SpaceThinker_Config(DatasetConfig):
+    dataset_id: str = "spacethinker"
+
+    align_stage_components: Tuple[Path, Path] = (
+        Path("download/SpaceThinker/SpaceThinker.json"),
+        Path("download/SpaceThinker/"),
+    )
+    finetune_stage_components: Tuple[Path, Path] = (
+        Path("download/SpaceThinker/SpaceThinker.json"),
+        Path("download/SpaceThinker/"),
+    )
+
+    dataset_root_dir: Path = Path("data")
+
+
 # === Define a Dataset Registry Enum for Reference & Validation =>> all *new* datasets must be added here! ===
 @unique
 class DatasetRegistry(Enum):
@@ -139,6 +156,8 @@ class DatasetRegistry(Enum):
     LLAVA_LVIS4V_LRV = LLaVa_LVIS4V_LRV_Config
 
     OPENSPACES = OpenSpaces_Config
+
+    SPACE_THINKER = SpaceThinker_Config
 
     @property
     def dataset_id(self) -> str:
