@@ -97,6 +97,7 @@ class FSDPStrategy(TrainingStrategy):
         epoch: int,
         train_loss: Optional[float] = None,
         only_trainable: bool = True,
+        rewrite_name: bool = False
     ) -> None:
         """Save a checkpoint to the `run_dir` only containing the state_dicts for trainable parameters by default."""
         assert isinstance(self.vlm, FSDP), "FSDPStrategy.save_checkpoint assumes VLM is already wrapped in FSDP!"
@@ -123,6 +124,9 @@ class FSDPStrategy(TrainingStrategy):
                     checkpoint_path = (
                         checkpoint_dir / f"step-{global_step:06d}-epoch-{epoch:02d}-loss={train_loss:.4f}.pt"
                     )
+                
+                if rewrite_name:
+                     checkpoint_path = checkpoint_dir / "best.pt"
 
                 # Save Checkpoint & Copy Latest to `latest-checkpoint.pt`
                 torch.save({"model": model_state_dicts}, checkpoint_path)

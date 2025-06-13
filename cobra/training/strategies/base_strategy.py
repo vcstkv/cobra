@@ -93,6 +93,7 @@ class TrainingStrategy(ABC):
         epoch: int,
         train_loss: Optional[float] = None,
         only_trainable: bool = True,
+        rewrite_name: bool = False
     ) -> None: ...
 
     @abstractmethod
@@ -186,6 +187,8 @@ class TrainingStrategy(ABC):
             # Just set `epochs` to some large number --> we'll short-circuit based on steps anyway
             self.epochs = 100
 
+        val_step = 5
+
         # === Train ===
         status = metrics.get_status()
         with tqdm(
@@ -261,39 +264,40 @@ class TrainingStrategy(ABC):
                         self.optimizer.zero_grad()
                         
                         true_label_size = 0
+                        
+                        if metrics.global_step % val_step == 0:
+                            self.vlm.eval()  # Set model to eval mode
+                            val_loss = 0.0
+                            val_label_size = 0
+                            with torch.no_grad():
+                                for val_batch in val_dataloader:
+                                    with torch.autocast(
+                                        "cuda",
+                                        dtype=self.mixed_precision_dtype,
+                                        enabled=self.enable_mixed_precision_training,
+                                    ):
+                                        val_output: CausalLMOutputWithPast = self.vlm(
+                                            input_ids=val_batch["input_ids"],
+                                            attention_mask=val_batch["attention_mask"],
+                                            pixel_values=val_batch["pixel_values"],
+                                            labels=val_batch["labels"],
+                                            multimodal_indices=val_batch["multimodal_indices"],
+                                        )
+                                        loss = val_output.loss
 
-                        self.vlm.eval()  # Set model to eval mode
-                        val_loss = 0.0
-                        val_label_size = 0
-                        with torch.no_grad():
-                            for val_batch in val_dataloader:
-                                with torch.autocast(
-                                    "cuda",
-                                    dtype=self.mixed_precision_dtype,
-                                    enabled=self.enable_mixed_precision_training,
-                                ):
-                                    val_output: CausalLMOutputWithPast = self.vlm(
-                                        input_ids=val_batch["input_ids"],
-                                        attention_mask=val_batch["attention_mask"],
-                                        pixel_values=val_batch["pixel_values"],
-                                        labels=val_batch["labels"],
-                                        multimodal_indices=val_batch["multimodal_indices"],
-                                    )
-                                    loss = val_output.loss
+                                    num_valid_labels = torch.sum(val_batch["labels"] != IGNORE_INDEX).item()
+                                    val_loss += loss.item() * num_valid_labels
+                                    val_label_size += num_valid_labels
 
-                                num_valid_labels = torch.sum(val_batch["labels"] != IGNORE_INDEX).item()
-                                val_loss += loss.item() * num_valid_labels
-                                val_label_size += num_valid_labels
-
-                        avg_val_loss = val_loss / max(val_label_size, 1)
-                        metrics.commit(val_loss=avg_val_loss)
-                        overwatch.info(f"Validation Loss: {avg_val_loss:.4f}")
-                        if avg_val_loss < self.best_val_loss:
-                            self.best_val_loss = avg_val_loss
-                            overwatch.info(f"New best validation loss: {avg_val_loss:.4f}. Saving checkpoint...")
-                            self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, avg_val_loss)
-                            dist.barrier()
-                        self.vlm.train()
+                            avg_val_loss = val_loss / max(val_label_size, 1)
+                            metrics.commit(val_loss=avg_val_loss)
+                            overwatch.info(f"Validation Loss: {avg_val_loss:.4f}")
+                            if avg_val_loss < self.best_val_loss:
+                                self.best_val_loss = avg_val_loss
+                                overwatch.info(f"New best validation loss: {avg_val_loss:.4f}. Saving checkpoint...")
+                                self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, avg_val_loss, rewrite_name=True)
+                                dist.barrier()
+                            self.vlm.train()
 
                         # Push Metrics
                         metrics.commit(global_step=metrics.global_step + 1, lr=self.lr_scheduler.get_last_lr()[0])

@@ -148,7 +148,7 @@ cache/
 data/
 
 # Runs and Results
-runs/
+runs*/
 results/
 
 # Test scripts
