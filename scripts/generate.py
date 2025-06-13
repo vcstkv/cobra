@@ -40,9 +40,11 @@ class GenerateConfig:
     hf_token: Union[str, Path] = Path(".hf_token")                      # Environment variable or Path to HF Token
 
     # Default Generation Parameters =>> subscribes to HuggingFace's GenerateMixIn API
-    do_sample: bool = False
-    temperature: float = 1.0
+    do_sample: bool = True
+    temperature: float = 0.3
     max_new_tokens: int = 512
+    top_p:float = 0.95
+    top_k:float = 0
 
     # fmt: on
 
@@ -119,6 +121,8 @@ def generate(cfg: GenerateConfig) -> None:
                         do_sample=cfg.do_sample,
                         temperature=cfg.temperature,
                         max_new_tokens=cfg.max_new_tokens,
+                        top_p=cfg.top_p,
+                        top_k=cfg.top_k
                     )
                     prompt_builder.add_turn(role="gpt", message=generated_text)
                     print(f"\t|=>> VLM Response >>> {generated_text}\n")

@@ -45,8 +45,11 @@ class EvaluationConfig:
     eval_summary_dir: Union[str, Path] = "eval_summary"
     
     # Generation Parameters
-    do_sample: bool = False
-    temperature: float = 0.2
+    do_sample: bool = True
+    temperature: float = 0.3
+    top_p:float = 0.95
+    top_k:float = 0
+
     max_new_tokens: int = 512
     
     # Evaluation Parameters
@@ -161,6 +164,8 @@ def evaluate_model_on_dataset(model, dataset, config: EvaluationConfig) -> Dict:
                     do_sample=config.do_sample,
                     temperature=config.temperature,
                     max_new_tokens=config.max_new_tokens,
+                    top_p=config.top_p,
+                    top_k=config.top_k,
                 )
             else:
                 # For text-only mode, we might need to handle differently
@@ -173,6 +178,8 @@ def evaluate_model_on_dataset(model, dataset, config: EvaluationConfig) -> Dict:
                     do_sample=config.do_sample,
                     temperature=config.temperature,
                     max_new_tokens=config.max_new_tokens,
+                    top_p=config.top_p,
+                    top_k=config.top_k,
                 )
             
             # Extract short answer
