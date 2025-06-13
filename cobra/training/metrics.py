@@ -133,6 +133,7 @@ class Metrics:
         self.state = {
             "loss_raw": deque(maxlen=grad_accumulation_steps),
             "loss": deque(maxlen=window_size),
+            "val_loss": deque(maxlen=window_size),
             "step_time": deque(maxlen=window_size),
             "lr": [],
         }
@@ -152,6 +153,7 @@ class Metrics:
     def commit(
         self, *, global_step: Optional[int] = None, lr: Optional[float] = None, update_step_time: bool = False, **kwargs
     ) -> None:
+        # print(f"I'm here with {kwargs}")
         """Update all metrics in `self.state` by iterating through special positional arguments & kwargs."""
         if global_step is not None:
             self.global_step = global_step
@@ -174,15 +176,21 @@ class Metrics:
                 loss_val = value.detach()
                 self.state["loss_raw"].append(loss_val)
                 self.state["loss"].append(loss_val)
+                # print(f"loss state: {self.state['loss']}")
+            elif key == 'val_loss':
+                self.state["val_loss"].append(value)
+                # print(f"val_loss state: {self.state['val_loss']}")
             else:
-                self.state[key].append(value.detach())
-
+                self.state[key].append(value)
     @overwatch.rank_zero_only()
     def push(self) -> str:
         # Note :: Raw Loss is an Average over Gradient Accumulation Steps --> No Smoothing!
+        # print(f"loss state: {self.state['loss']}")
         loss_raw = torch.stack(list(self.state["loss_raw"])).mean().item()
         loss = torch.stack(list(self.state["loss"])).mean().item()
         step_time, lr = np.mean(list(self.state["step_time"])), self.state["lr"][-1]
+        val_loss = self.state["val_loss"][-1]
+        print(f"val_loss state: {self.state['val_loss']}")
         status = self.get_status(loss)
 
         # Fire to Trackers
@@ -195,6 +203,7 @@ class Metrics:
                 f"{prefix}/Loss (Raw)": loss_raw,
                 f"{prefix}/Learning Rate": lr,
                 f"{prefix}/Step Time": step_time,
+                f"{prefix}/Validation Loss": val_loss,
             },
         )
         return status

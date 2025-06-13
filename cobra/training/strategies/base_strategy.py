@@ -9,6 +9,7 @@ heavy lifting.
 """
 from abc import ABC, abstractmethod
 from pathlib import Path
+import random
 from typing import Callable, Optional
 
 import torch
@@ -108,19 +109,45 @@ class TrainingStrategy(ABC):
         stage: str = "finetune",
         batch_construction_strategy: str = "split-modality",
         seed: int = 7,
+        val_ratio: float = 0.1
     ) -> None:
         """Run the training loop for the given `dataset` and `collator`; log losses, results to `metrics`"""
         if "finetune" in stage and batch_construction_strategy == "split-modality":
             # Instantiate the split-modality sampler; if you want to extend with other batch construction schemes,
             #   (e.g., grouping by length) =>> can easily add them here!
+            rng = random.Random(seed)
             modality_lengths = dataset.get_modality_lengths()
+            
+            total_size = len(dataset)
+            val_cutoff = int(val_ratio*total_size)
+            
+            all_indices = list(range(total_size))
+            val_indices = random.sample(all_indices, val_cutoff)
+            train_indices = list(set(all_indices) - set(val_indices))
+            
+            val_modality = [modality_lengths[i] for i in val_indices]
+            train_modality = [modality_lengths[i] for i in train_indices]
+
+            valid_dataset = [dataset[i] for i in val_indices]
+            train_dataset = [dataset[i] for i in train_indices]
+
             sampler = SplitModalitySampler(
-                dataset,
-                modality_lengths,
+                train_dataset,
+                train_modality,
                 global_batch_size=self.global_batch_size,
                 num_replicas=overwatch.world_size(),
                 rank=overwatch.rank(),
                 seed=seed,
+                drop_last=False,
+            )
+
+            val_sampler = SplitModalitySampler(
+                valid_dataset,
+                val_modality,
+                global_batch_size=self.global_batch_size,
+                num_replicas=overwatch.world_size(),
+                rank=overwatch.rank(),
+                seed=seed + 1,  # different seed for validation
                 drop_last=False,
             )
 
@@ -136,11 +163,20 @@ class TrainingStrategy(ABC):
 
         # Create a DataLoader with the initialized sampler, per-device-bsz, and collator
         dataloader = DataLoader(
-            dataset,
+            train_dataset,
             batch_size=self.per_device_batch_size,
             sampler=sampler,
             collate_fn=collator,
-            num_workers=2,
+            num_workers=4,
+            worker_init_fn=self.worker_init_fn,
+        )
+
+        val_dataloader = DataLoader(
+            valid_dataset,
+            batch_size=self.per_device_batch_size,
+            sampler=val_sampler,
+            collate_fn=collator,
+            num_workers=4,
             worker_init_fn=self.worker_init_fn,
         )
 
@@ -172,6 +208,7 @@ class TrainingStrategy(ABC):
                 # Note that we'll unpack batch (and let AMP/FSDP do its thing) in the VLM.forward() call
                 #   => Basically, if we're using mixed precision (or not), autocast()/FSDP will move to device!
                 true_label_size = 0
+                self.best_val_loss = float('inf')  
                 for train_idx, batch in enumerate(dataloader):
                     # [Contract] self.vlm.forward() must automatically compute `loss` and return!
                     with torch.autocast(
@@ -224,6 +261,39 @@ class TrainingStrategy(ABC):
                         self.optimizer.zero_grad()
                         
                         true_label_size = 0
+
+                        self.vlm.eval()  # Set model to eval mode
+                        val_loss = 0.0
+                        val_label_size = 0
+                        with torch.no_grad():
+                            for val_batch in val_dataloader:
+                                with torch.autocast(
+                                    "cuda",
+                                    dtype=self.mixed_precision_dtype,
+                                    enabled=self.enable_mixed_precision_training,
+                                ):
+                                    val_output: CausalLMOutputWithPast = self.vlm(
+                                        input_ids=val_batch["input_ids"],
+                                        attention_mask=val_batch["attention_mask"],
+                                        pixel_values=val_batch["pixel_values"],
+                                        labels=val_batch["labels"],
+                                        multimodal_indices=val_batch["multimodal_indices"],
+                                    )
+                                    loss = val_output.loss
+
+                                num_valid_labels = torch.sum(val_batch["labels"] != IGNORE_INDEX).item()
+                                val_loss += loss.item() * num_valid_labels
+                                val_label_size += num_valid_labels
+
+                        avg_val_loss = val_loss / max(val_label_size, 1)
+                        metrics.commit(val_loss=avg_val_loss)
+                        overwatch.info(f"Validation Loss: {avg_val_loss:.4f}")
+                        if avg_val_loss < self.best_val_loss:
+                            self.best_val_loss = avg_val_loss
+                            overwatch.info(f"New best validation loss: {avg_val_loss:.4f}. Saving checkpoint...")
+                            self.save_checkpoint(metrics.run_dir, metrics.global_step, epoch, avg_val_loss)
+                            dist.barrier()
+                        self.vlm.train()
 
                         # Push Metrics
                         metrics.commit(global_step=metrics.global_step + 1, lr=self.lr_scheduler.get_last_lr()[0])
