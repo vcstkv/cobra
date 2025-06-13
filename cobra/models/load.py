@@ -53,7 +53,7 @@ def load(
 
         # Get paths for `config.json` and pretrained checkpoint
         assert (config_json := run_dir / "config.json").exists(), f"Missing `config.json` for `{run_dir = }`"
-        assert (checkpoint_pt := run_dir / "checkpoints" / "latest-checkpoint.pt").exists(), "Missing checkpoint!"
+        assert (checkpoint_pt := run_dir / "checkpoints" / "best.pt").exists(), "Missing checkpoint!"
     else:
         if model_id_or_path not in GLOBAL_REGISTRY:
             raise ValueError(f"Couldn't find `{model_id_or_path = }; check `cobra.available_model_names()`")
@@ -61,7 +61,7 @@ def load(
         overwatch.info(f"Downloading `{(model_id := GLOBAL_REGISTRY[model_id_or_path]['model_id'])} from HF Hub")
         config_json = hf_hub_download(repo_id=HF_HUB_REPO, filename=f"{model_id}/config.json", cache_dir=cache_dir)
         checkpoint_pt = hf_hub_download(
-            repo_id=HF_HUB_REPO, filename=f"{model_id}/checkpoints/latest-checkpoint.pt", cache_dir=cache_dir
+            repo_id=HF_HUB_REPO, filename=f"{model_id}/checkpoints/best.pt", cache_dir=cache_dir
         )
 
     # Load Model Config from `config.json`
